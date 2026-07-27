@@ -148,3 +148,15 @@
     .breathe { animation: none; opacity: 0.5; }
   }
 }
+
+
+@layer utilities {
+  /* landing demo card: always white paper with ruled lines, theme-independent */
+  .index-card-light {
+    background-color: #fffdf8;
+    background-image:
+      linear-gradient(to right, transparent 2.35rem, hsl(4 74% 60% / 0.35) 2.35rem, hsl(4 74% 60% / 0.35) calc(2.35rem + 1.5px), transparent calc(2.35rem + 1.5px)),
+      repeating-linear-gradient(to bottom, transparent 0, transparent 1.9rem, hsl(210 60% 60% / 0.18) 1.9rem, hsl(210 60% 60% / 0.18) calc(1.9rem + 1px));
+    background-position: 0 1.2rem;
+  }
+}

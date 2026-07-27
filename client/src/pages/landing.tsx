@@ -35,14 +35,14 @@ function DemoCard() {
         transition={{ duration: 0.8, ease: [0.33, 1, 0.68, 1] }}
         className="preserve-3d relative aspect-[4/3] w-full"
       >
-        <div className="backface-hidden index-card absolute inset-0 flex items-center justify-center rounded-3xl p-8 pl-12 text-center shadow-2xl">
+        <div className="backface-hidden index-card-light absolute inset-0 flex items-center justify-center rounded-3xl p-8 pl-12 text-center shadow-2xl">
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Question</p>
             <p className="text-xl font-semibold leading-snug text-gray-900">What is the time complexity of binary search?</p>
           </div>
         </div>
         <div
-          className="backface-hidden index-card absolute inset-0 flex items-center justify-center rounded-3xl p-8 pl-12 text-center shadow-2xl"
+          className="backface-hidden index-card-light absolute inset-0 flex items-center justify-center rounded-3xl p-8 pl-12 text-center shadow-2xl"
           style={{ transform: "rotateY(180deg)" }}
         >
           <div>
