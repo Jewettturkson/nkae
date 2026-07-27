@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Layers, ListChecks, Sparkles, Timer } from "lucide-react";
+import { ArrowRight, CalendarClock, FileText, Layers, ListChecks, Sparkles, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import KaeWordmark, { AnimatedKaeMark, KaeMark } from "@/components/app/BrandMark";
 import { firebaseReady, signInWithGoogle, signInWithEmail, signUpWithEmail } from "@/lib/firebase";
@@ -14,9 +14,9 @@ const FEATURES = [
 ];
 
 const STEPS = [
-  { n: "01", title: "Upload", body: "Paste your notes, a chapter, anything you need to know." },
-  { n: "02", title: "Generate", body: "AI builds your summary, flashcards, and a quiz in seconds." },
-  { n: "03", title: "Remember", body: "Nkae brings you back at exactly the right moment." },
+  { n: "01", icon: FileText, title: "Upload", body: "Paste your notes, a chapter, anything you need to know." },
+  { n: "02", icon: Sparkles, title: "Generate", body: "AI builds your summary, flashcards, and a quiz in seconds." },
+  { n: "03", icon: CalendarClock, title: "Remember", body: "Nkae brings you back at exactly the right moment." },
 ];
 
 // Auto-flipping index card: the product demos itself.
@@ -240,7 +240,8 @@ export default function Landing() {
         {/* SHEET 2: how it works, slides over the hero (Family-style stacking) */}
         <section className="sticky top-0 z-10 flex min-h-screen flex-col justify-center rounded-t-[3rem] bg-[#1f1b28] px-6 py-24 shadow-[0_-30px_60px_rgba(0,0,0,0.45)]">
           <div aria-hidden className="breathe right-[10%] top-[16%] h-[300px] w-[300px] bg-[#5b4be0]/20" style={{ animationDelay: "-2s" }} />
-          <div className="relative mx-auto w-full max-w-5xl">
+          <div aria-hidden className="breathe bottom-[8%] left-[6%] h-[260px] w-[260px] bg-[#ffd44d]/8" style={{ animationDelay: "-5s" }} />
+          <div className="relative mx-auto w-full max-w-5xl text-center">
             <motion.p
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -249,7 +250,17 @@ export default function Landing() {
             >
               how it works
             </motion.p>
-            <div className="mt-12 grid gap-12 md:grid-cols-3">
+            <motion.h2
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7 }}
+              className="mx-auto mt-4 max-w-xl text-4xl font-extrabold tracking-tight text-white md:text-5xl"
+            >
+              Three steps to <span className="text-[#ffd44d]">remembrance</span>.
+            </motion.h2>
+            <div className="relative mt-16 grid gap-12 md:grid-cols-3 md:gap-8">
+              <div aria-hidden className="absolute left-[16%] right-[16%] top-9 hidden border-t border-dashed border-white/15 md:block" />
               {STEPS.map((step, i) => (
                 <motion.div
                   key={step.n}
@@ -257,43 +268,69 @@ export default function Landing() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-80px" }}
                   transition={{ duration: 0.7, delay: i * 0.15, ease: [0.33, 1, 0.68, 1] }}
+                  className="relative flex flex-col items-center"
                 >
-                  <p className="text-6xl font-extrabold text-white/10">{step.n}</p>
-                  <h2 className="mt-3 text-2xl font-bold text-white">{step.title}</h2>
-                  <p className="mt-2 leading-relaxed text-neutral-400">{step.body}</p>
+                  <span className="relative z-10 flex h-[72px] w-[72px] items-center justify-center rounded-3xl border border-white/10 bg-[#2a2437] shadow-lg shadow-black/30">
+                    <step.icon className="h-7 w-7 text-[#8b7bf7]" />
+                    <span className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#ffd44d] font-mono text-[11px] font-bold text-[#17141d]">
+                      {i + 1}
+                    </span>
+                  </span>
+                  <h3 className="mt-6 text-2xl font-bold text-white">{step.title}</h3>
+                  <p className="mt-2 max-w-[260px] leading-relaxed text-neutral-400">{step.body}</p>
                 </motion.div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* SHEET 3: features on paper, slides over sheet 2 */}
-        <section className="sticky top-0 z-20 flex min-h-screen flex-col justify-center rounded-t-[3rem] bg-background px-6 py-24 shadow-[0_-30px_60px_rgba(0,0,0,0.35)]">
-          <div className="mx-auto w-full max-w-5xl">
-            <motion.p
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="font-mono text-xs uppercase tracking-[0.3em] text-primary"
-            >
-              what you get
-            </motion.p>
-            <div className="mt-10 divide-y divide-border">
+        {/* SHEET 3: features on warm paper (art-directed, theme-independent) */}
+        <section className="sticky top-0 z-20 flex min-h-screen flex-col justify-center rounded-t-[3rem] bg-[#faf8f4] px-6 py-24 shadow-[0_-30px_60px_rgba(0,0,0,0.35)]">
+          <div className="mx-auto grid w-full max-w-5xl gap-12 md:grid-cols-[1fr_1.3fr] md:gap-16">
+            <div className="md:sticky md:top-24 md:self-start">
+              <motion.p
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                viewport={{ once: true }}
+                className="font-mono text-xs uppercase tracking-[0.3em] text-[#5b4be0]"
+              >
+                what you get
+              </motion.p>
+              <motion.h2
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.7 }}
+                className="mt-4 text-4xl font-extrabold leading-[1.08] tracking-tight text-[#1c1a24] md:text-5xl"
+              >
+                Everything between your notes and your grade.
+              </motion.h2>
+              <motion.p
+                initial={{ opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: 0.15 }}
+                className="mt-4 max-w-sm leading-relaxed text-[#5c574b]"
+              >
+                One upload becomes a complete study system, scheduled around how memory actually works.
+              </motion.p>
+            </div>
+            <div>
               {FEATURES.map((feature, i) => (
                 <motion.div
                   key={feature.title}
-                  initial={{ opacity: 0, x: -24 }}
+                  initial={{ opacity: 0, x: 24 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true, margin: "-60px" }}
                   transition={{ duration: 0.6, delay: i * 0.08 }}
-                  className="flex items-start gap-5 py-7"
+                  className="flex items-start gap-5 border-b border-[#e6e2d8] py-7 first:pt-0 last:border-b-0"
                 >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#5b4be0]/10 text-[#5b4be0]">
                     <feature.icon className="h-5 w-5" />
                   </span>
                   <div>
-                    <h3 className="text-lg font-bold text-foreground">{feature.title}</h3>
-                    <p className="mt-1 leading-relaxed text-muted-foreground">{feature.body}</p>
+                    <h3 className="text-lg font-bold text-[#1c1a24]">{feature.title}</h3>
+                    <p className="mt-1 leading-relaxed text-[#5c574b]">{feature.body}</p>
                   </div>
                 </motion.div>
               ))}
