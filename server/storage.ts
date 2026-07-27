@@ -138,11 +138,34 @@ export class DatabaseStorage implements IStorage {
     userId: string,
     filters: { subjectId?: number; search?: string; limit?: number; offset?: number } = {}
   ): Promise<StudyMaterialWithDetails[]> {
-    return [];
+    const rows = await db.query.studyMaterials.findMany({
+      where: filters.subjectId
+        ? and(eq(studyMaterials.userId, userId), eq(studyMaterials.subjectId, filters.subjectId))
+        : eq(studyMaterials.userId, userId),
+      with: { user: true, subject: true, flashcards: true, quizQuestions: true },
+      orderBy: desc(studyMaterials.createdAt),
+      limit: filters.limit ?? 50,
+      offset: filters.offset ?? 0,
+    });
+    return rows
+      .filter((row) =>
+        filters.search ? row.title.toLowerCase().includes(filters.search.toLowerCase()) : true
+      )
+      .map(({ flashcards: cards, quizQuestions: questions, ...row }) => ({
+        ...row,
+        flashcardsCount: cards.length,
+        questionsCount: questions.length,
+      })) as StudyMaterialWithDetails[];
   }
 
   async getStudyMaterial(id: number): Promise<StudyMaterialWithDetails | undefined> {
-    return undefined;
+    const row = await db.query.studyMaterials.findFirst({
+      where: eq(studyMaterials.id, id),
+      with: { user: true, subject: true, flashcards: true, quizQuestions: true },
+    });
+    if (!row) return undefined;
+    const { flashcards: cards, quizQuestions: questions, ...rest } = row;
+    return { ...rest, flashcardsCount: cards.length, questionsCount: questions.length } as StudyMaterialWithDetails;
   }
 
   async createStudyMaterial(material: InsertStudyMaterial): Promise<StudyMaterial> {
@@ -166,11 +189,22 @@ export class DatabaseStorage implements IStorage {
 
   // Flashcard operations  
   async getFlashcards(filters: { userId?: string; studyMaterialId?: number; due?: boolean; limit?: number }): Promise<FlashcardWithDetails[]> {
-    return [];
+    const conditions = [];
+    if (filters.userId) conditions.push(eq(flashcards.userId, filters.userId));
+    if (filters.studyMaterialId) conditions.push(eq(flashcards.studyMaterialId, filters.studyMaterialId));
+    if (filters.due) conditions.push(sql`(${flashcards.nextReview} IS NULL OR ${flashcards.nextReview} <= NOW())`);
+    const rows = await db.query.flashcards.findMany({
+      where: conditions.length ? and(...conditions) : undefined,
+      with: { user: true, studyMaterial: true },
+      orderBy: asc(flashcards.nextReview),
+      limit: filters.limit ?? 200,
+    });
+    return rows as FlashcardWithDetails[];
   }
 
   async getFlashcard(id: number): Promise<Flashcard | undefined> {
-    return undefined;
+    const [card] = await db.select().from(flashcards).where(eq(flashcards.id, id));
+    return card;
   }
 
   async createFlashcard(flashcard: InsertFlashcard): Promise<Flashcard> {
@@ -193,16 +227,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async generateFlashcardsFromMaterial(materialId: number): Promise<Flashcard[]> {
-    return [];
+    return await db.select().from(flashcards).where(eq(flashcards.studyMaterialId, materialId));
   }
 
   // Quiz question operations
   async getQuizQuestions(filters: { userId?: string; studyMaterialId?: number; limit?: number }): Promise<QuizQuestion[]> {
-    return [];
+    const conditions = [];
+    if (filters.userId) conditions.push(eq(quizQuestions.userId, filters.userId));
+    if (filters.studyMaterialId) conditions.push(eq(quizQuestions.studyMaterialId, filters.studyMaterialId));
+    return await db
+      .select()
+      .from(quizQuestions)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(quizQuestions.createdAt))
+      .limit(filters.limit ?? 100);
   }
 
   async getQuizQuestion(id: number): Promise<QuizQuestion | undefined> {
-    return undefined;
+    const [question] = await db.select().from(quizQuestions).where(eq(quizQuestions.id, id));
+    return question;
   }
 
   async createQuizQuestion(question: InsertQuizQuestion): Promise<QuizQuestion> {
@@ -211,12 +254,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async generateQuizFromMaterial(materialId: number): Promise<QuizQuestion[]> {
-    return [];
+    return await db.select().from(quizQuestions).where(eq(quizQuestions.studyMaterialId, materialId));
   }
 
   // Study session operations
   async getStudySessions(userId: string, filters?: { subjectId?: number; dateFrom?: Date; dateTo?: Date; limit?: number }): Promise<StudySessionWithDetails[]> {
-    return [];
+    const conditions = [eq(studySessions.userId, userId)];
+    if (filters?.subjectId) conditions.push(eq(studySessions.subjectId, filters.subjectId));
+    if (filters?.dateFrom) conditions.push(gte(studySessions.createdAt, filters.dateFrom));
+    if (filters?.dateTo) conditions.push(lte(studySessions.createdAt, filters.dateTo));
+    const rows = await db.query.studySessions.findMany({
+      where: and(...conditions),
+      with: { user: true, subject: true, studyMaterial: true },
+      orderBy: desc(studySessions.createdAt),
+      limit: filters?.limit ?? 100,
+    });
+    return rows as StudySessionWithDetails[];
   }
 
   async createStudySession(session: InsertStudySession): Promise<StudySession> {
@@ -235,7 +288,20 @@ export class DatabaseStorage implements IStorage {
 
   // Study goal operations
   async getStudyGoals(userId: string, filters?: { subjectId?: number; completed?: boolean }): Promise<StudyGoalWithDetails[]> {
-    return [];
+    const conditions = [eq(studyGoals.userId, userId)];
+    if (filters?.subjectId) conditions.push(eq(studyGoals.subjectId, filters.subjectId));
+    if (filters?.completed !== undefined) conditions.push(eq(studyGoals.isCompleted, filters.completed));
+    const rows = await db.query.studyGoals.findMany({
+      where: and(...conditions),
+      with: { user: true, subject: true },
+      orderBy: desc(studyGoals.createdAt),
+    });
+    // goals track daily minutes and weekly sessions; percentage is derived
+    // client-side from stats, so completion state stands in here
+    return rows.map((row) => ({
+      ...row,
+      progressPercentage: row.isCompleted ? 100 : 0,
+    })) as StudyGoalWithDetails[];
   }
 
   async createStudyGoal(goal: InsertStudyGoal): Promise<StudyGoal> {
@@ -259,7 +325,11 @@ export class DatabaseStorage implements IStorage {
 
   // Daily stats operations
   async getDailyStats(userId: string, date: Date): Promise<DailyStats | undefined> {
-    return undefined;
+    const [stats] = await db
+      .select()
+      .from(dailyStats)
+      .where(and(eq(dailyStats.userId, userId), eq(dailyStats.date, date)));
+    return stats;
   }
 
   async updateDailyStats(userId: string, date: Date, updates: Partial<InsertDailyStats>): Promise<DailyStats> {
