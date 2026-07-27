@@ -14,6 +14,7 @@ import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { signOutUser } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 
@@ -43,7 +44,7 @@ export default function Profile() {
         variant: "destructive",
       });
       setTimeout(() => {
-        window.location.href = "/api/login";
+        window.location.href = "/";
       }, 500);
       return;
     }
@@ -81,7 +82,7 @@ export default function Profile() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/";
         }, 500);
         return;
       }
@@ -125,7 +126,7 @@ export default function Profile() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.location.href = "/api/logout"}
+            onClick={async () => { await signOutUser(); window.location.href = "/"; }}
             className="text-destructive border-destructive/40 hover:bg-destructive/10"
           >
             <LogOut className="h-4 w-4 mr-2" />
