@@ -1,22 +1,23 @@
 import { useEffect, useState } from "react";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, CalendarClock, FileText, Layers, ListChecks, Sparkles, Timer } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { IconCards, IconFocus, IconGenerate, IconQuiz, IconSchedule, IconSummary, IconUpload } from "@/components/app/LandingIcons";
 import { Button } from "@/components/ui/button";
 import KaeWordmark, { AnimatedKaeMark, KaeMark } from "@/components/app/BrandMark";
 import { firebaseReady, signInWithGoogle, signInWithEmail, signUpWithEmail } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 
 const FEATURES = [
-  { icon: Sparkles, title: "AI summaries", body: "Notes in, clarity out. Summaries and key points in seconds." },
-  { icon: Layers, title: "Smart flashcards", body: "Spaced repetition that resurfaces cards right before you forget them." },
-  { icon: ListChecks, title: "Adaptive quizzes", body: "Active recall with explanations, generated from your own material." },
-  { icon: Timer, title: "Focus sessions", body: "Pomodoro blocks, focus ratings, streaks, and your study heatmap." },
+  { icon: IconSummary, title: "AI summaries", body: "Notes in, clarity out. Summaries and key points in seconds." },
+  { icon: IconCards, title: "Smart flashcards", body: "Spaced repetition that resurfaces cards right before you forget them." },
+  { icon: IconQuiz, title: "Adaptive quizzes", body: "Active recall with explanations, generated from your own material." },
+  { icon: IconFocus, title: "Focus sessions", body: "Pomodoro blocks, focus ratings, streaks, and your study heatmap." },
 ];
 
 const STEPS = [
-  { n: "01", icon: FileText, title: "Upload", body: "Paste your notes, a chapter, anything you need to know." },
-  { n: "02", icon: Sparkles, title: "Generate", body: "AI builds your summary, flashcards, and a quiz in seconds." },
-  { n: "03", icon: CalendarClock, title: "Remember", body: "Nkae brings you back at exactly the right moment." },
+  { n: "01", icon: IconUpload, title: "Upload", body: "Paste your notes, a chapter, anything you need to know." },
+  { n: "02", icon: IconGenerate, title: "Generate", body: "AI builds your summary, flashcards, and a quiz in seconds." },
+  { n: "03", icon: IconSchedule, title: "Remember", body: "Nkae brings you back at exactly the right moment." },
 ];
 
 // Auto-flipping index card: the product demos itself.
@@ -241,6 +242,10 @@ export default function Landing() {
         <section className="sticky top-0 z-10 flex min-h-screen flex-col justify-center rounded-t-[3rem] bg-[#1f1b28] px-6 py-24 shadow-[0_-30px_60px_rgba(0,0,0,0.45)]">
           <div aria-hidden className="breathe right-[10%] top-[16%] h-[300px] w-[300px] bg-[#5b4be0]/20" style={{ animationDelay: "-2s" }} />
           <div aria-hidden className="breathe bottom-[8%] left-[6%] h-[260px] w-[260px] bg-[#ffd44d]/8" style={{ animationDelay: "-5s" }} />
+          <span aria-hidden className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 select-none text-center text-[24vw] font-extrabold leading-none tracking-tight text-white/[0.025]">
+            nkae
+          </span>
+          <span className="absolute left-6 top-8 font-mono text-[10px] uppercase tracking-[0.3em] text-white/25 md:left-10">01 · the loop</span>
           <div className="relative mx-auto w-full max-w-5xl text-center">
             <motion.p
               initial={{ opacity: 0 }}
@@ -270,8 +275,8 @@ export default function Landing() {
                   transition={{ duration: 0.7, delay: i * 0.15, ease: [0.33, 1, 0.68, 1] }}
                   className="relative flex flex-col items-center"
                 >
-                  <span className="relative z-10 flex h-[72px] w-[72px] items-center justify-center rounded-3xl border border-white/10 bg-[#2a2437] shadow-lg shadow-black/30">
-                    <step.icon className="h-7 w-7 text-[#8b7bf7]" />
+                  <span className="relative z-10 flex h-[76px] w-[76px] items-center justify-center rounded-3xl border border-white/10 bg-gradient-to-b from-[#2c2539] to-[#221d2e] shadow-lg shadow-black/30">
+                    <step.icon className="text-[#a99df8]" size={36} />
                     <span className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#ffd44d] font-mono text-[11px] font-bold text-[#17141d]">
                       {i + 1}
                     </span>
@@ -285,8 +290,12 @@ export default function Landing() {
         </section>
 
         {/* SHEET 3: features on warm paper (art-directed, theme-independent) */}
-        <section className="sticky top-0 z-20 flex min-h-screen flex-col justify-center rounded-t-[3rem] bg-[#faf8f4] px-6 py-24 shadow-[0_-30px_60px_rgba(0,0,0,0.35)]">
-          <div className="mx-auto grid w-full max-w-5xl gap-12 md:grid-cols-[1fr_1.3fr] md:gap-16">
+        <section className="dot-grid sticky top-0 z-20 flex min-h-screen flex-col justify-center overflow-hidden rounded-t-[3rem] bg-[#faf8f4] px-6 py-24 shadow-[0_-30px_60px_rgba(0,0,0,0.35)]">
+          <span aria-hidden className="pointer-events-none absolute -right-8 top-6 select-none text-[17vw] font-extrabold leading-none tracking-tight text-[#5b4be0]/[0.05]">
+            kae
+          </span>
+          <span className="absolute left-6 top-8 font-mono text-[10px] uppercase tracking-[0.3em] text-[#1c1a24]/30 md:left-10">02 · the toolkit</span>
+          <div className="relative mx-auto grid w-full max-w-5xl gap-12 md:grid-cols-[1fr_1.3fr] md:gap-16">
             <div className="md:sticky md:top-24 md:self-start">
               <motion.p
                 initial={{ opacity: 0 }}
@@ -325,8 +334,8 @@ export default function Landing() {
                   transition={{ duration: 0.6, delay: i * 0.08 }}
                   className="flex items-start gap-5 border-b border-[#e6e2d8] py-7 first:pt-0 last:border-b-0"
                 >
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#5b4be0]/10 text-[#5b4be0]">
-                    <feature.icon className="h-5 w-5" />
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[#5b4be0]/15 bg-white text-[#5b4be0] shadow-sm">
+                    <feature.icon size={30} />
                   </span>
                   <div>
                     <h3 className="text-lg font-bold text-[#1c1a24]">{feature.title}</h3>

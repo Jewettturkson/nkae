@@ -160,3 +160,11 @@
     background-position: 0 1.2rem;
   }
 }
+
+
+@layer utilities {
+  .dot-grid {
+    background-image: radial-gradient(hsl(30 6% 10% / 0.06) 1.2px, transparent 1.2px);
+    background-size: 24px 24px;
+  }
+}
