@@ -92,3 +92,40 @@
       repeating-linear-gradient(to bottom, transparent 0, transparent 1.9rem, hsl(210 40% 60% / 0.1) 1.9rem, hsl(210 40% 60% / 0.1) calc(1.9rem + 1px));
   }
 }
+
+
+@layer utilities {
+  /* landing: slow-drifting aura blobs */
+  @keyframes aura-drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(60px, -40px) scale(1.15); }
+    66% { transform: translate(-40px, 30px) scale(0.95); }
+  }
+  .aura {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    animation: aura-drift 18s ease-in-out infinite;
+    pointer-events: none;
+  }
+  /* landing: floating fold triangles */
+  @keyframes fold-float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-22px) rotate(8deg); }
+  }
+  .fold-float {
+    animation: fold-float 7s ease-in-out infinite;
+  }
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .aura, .fold-float { animation: none; }
+  }
+}
