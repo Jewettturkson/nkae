@@ -7,14 +7,34 @@ import { initializeApp, cert, applicationDefault, getApps } from "firebase-admin
 import { getAuth } from "firebase-admin/auth";
 import { storage } from "./storage";
 
+// A bad or missing credential must never crash the server. If init fails we
+// log loudly, boot anyway, and auth endpoints return 503 until it's fixed.
+let adminReady = false;
+
 function initFirebaseAdmin() {
-  if (getApps().length > 0) return;
-  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  if (b64) {
-    const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
-    initializeApp({ credential: cert(json) });
-  } else {
-    initializeApp({ credential: applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID });
+  if (getApps().length > 0) {
+    adminReady = true;
+    return;
+  }
+  try {
+    const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+    if (b64) {
+      const decoded = Buffer.from(b64, "base64").toString("utf8");
+      const json = JSON.parse(decoded);
+      initializeApp({ credential: cert(json) });
+    } else {
+      initializeApp({ credential: applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID });
+    }
+    adminReady = true;
+    console.log("Firebase Admin initialized");
+  } catch (error) {
+    console.error(
+      "CONFIG ERROR: Firebase Admin failed to initialize. " +
+        "FIREBASE_SERVICE_ACCOUNT_BASE64 must be the base64 of the service-account JSON " +
+        "(run: base64 -i service-account.json | tr -d '\\n'). " +
+        "The server is running, but auth endpoints return 503 until this is fixed.",
+      error instanceof Error ? error.message : error,
+    );
   }
 }
 
@@ -24,6 +44,9 @@ export async function setupAuth(_app: Express) {
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   try {
+    if (!adminReady) {
+      return res.status(503).json({ message: "Auth is not configured on the server. Check FIREBASE_SERVICE_ACCOUNT_BASE64." });
+    }
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : null;
     if (!token) {
