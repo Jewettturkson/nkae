@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { startReminderScheduler } from "./reminders";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
@@ -64,5 +65,6 @@ app.use((req, res, next) => {
   // reusePort was a Replit-specific option; it throws ENOTSUP on other hosts
   server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
+    startReminderScheduler();
   });
 })();

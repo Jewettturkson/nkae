@@ -37,6 +37,8 @@ export const users = pgTable("users", {
   graduationYear: integer("graduation_year"),
   bio: text("bio"),
   isVerified: boolean("is_verified").default(false),
+  remindersEnabled: boolean("reminders_enabled").default(true),
+  lastReminderSentAt: timestamp("last_reminder_sent_at"),
   stripeCustomerId: varchar("stripe_customer_id"),
   stripeSubscriptionId: varchar("stripe_subscription_id"),
   createdAt: timestamp("created_at").defaultNow(),

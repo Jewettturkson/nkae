@@ -1,4 +1,5 @@
 import multer from "multer";
+import { disableReminders, reminderToken } from "./reminders";
 import { PDFDocument } from "pdf-lib";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
@@ -274,6 +275,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+
+
+  // One-click unsubscribe from reminder emails (no auth: HMAC-signed link)
+  app.get('/api/reminders/unsubscribe', async (req, res) => {
+    try {
+      const uid = String(req.query.uid || "");
+      const sig = String(req.query.sig || "");
+      if (!uid || sig !== reminderToken(uid)) {
+        return res.status(400).send("Invalid unsubscribe link.");
+      }
+      await disableReminders(uid);
+      res
+        .status(200)
+        .send('<html><body style="font-family:sans-serif;padding:48px;text-align:center;"><h2>You are unsubscribed.</h2><p>nkae will not send you review reminders anymore.</p></body></html>');
+    } catch (error) {
+      console.error("Unsubscribe failed:", error);
+      res.status(500).send("Something went wrong.");
+    }
+  });
 
   // One-click sample material so new users see the product working
   // without spending an AI generation.
