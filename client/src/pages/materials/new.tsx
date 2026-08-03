@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Upload, FileText, Sparkles, ArrowLeft } from "lucide-react";
+import { Upload, FileText, Sparkles, ArrowLeft, Mic, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -64,6 +64,62 @@ export default function NewMaterial() {
     }
     setIsExtracting(false);
   }
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+  const MAX_RECORD_SECONDS = 45 * 60;
+
+  function stopRecording() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setIsRecording(false);
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== "inactive") rec.stop();
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 32 kbps opus/aac is plenty for speech and keeps 45 min under the 25MB upload cap
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
+      const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 });
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const type = rec.mimeType || "audio/webm";
+        const ext = type.includes("mp4") ? "m4a" : "webm";
+        const blob = new Blob(chunksRef.current, { type });
+        if (blob.size < 2000) {
+          toast({ title: "Nothing recorded", description: "The recording was empty. Try again closer to the speaker.", variant: "destructive" });
+          return;
+        }
+        handleFile(new File([blob], `lecture-recording.${ext}`, { type }));
+      };
+      rec.start(1000);
+      mediaRecorderRef.current = rec;
+      setRecordSeconds(0);
+      setIsRecording(true);
+      timerRef.current = window.setInterval(() => {
+        setRecordSeconds((s) => {
+          if (s + 1 >= MAX_RECORD_SECONDS) stopRecording();
+          return s + 1;
+        });
+      }, 1000);
+    } catch {
+      toast({
+        title: "Microphone unavailable",
+        description: "Allow microphone access in your browser settings and try again.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  const recClock = `${String(Math.floor(recordSeconds / 60)).padStart(2, "0")}:${String(recordSeconds % 60).padStart(2, "0")}`;
 
   // Fetch subjects for dropdown
   const { data: subjects } = useQuery({
@@ -296,6 +352,34 @@ export default function NewMaterial() {
                     </>
                   )}
                 </div>
+
+                {!isRecording ? (
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    disabled={isExtracting}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/60 hover:bg-primary/5 disabled:opacity-50"
+                  >
+                    <Mic className="h-4 w-4 text-primary" />
+                    Or record a lecture right here
+                  </button>
+                ) : (
+                  <div className="flex w-full items-center justify-between rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3">
+                    <span className="flex items-center gap-3 text-sm font-medium text-foreground">
+                      <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" />
+                      Recording {recClock}
+                      <span className="text-xs text-muted-foreground">(auto-stops at 45:00)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={stopRecording}
+                      className="flex items-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+                    >
+                      <Square className="h-3.5 w-3.5" />
+                      Stop &amp; transcribe
+                    </button>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="content" className="text-sm font-medium text-foreground/90">
