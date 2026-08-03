@@ -1,4 +1,5 @@
 import multer from "multer";
+import { PDFDocument } from "pdf-lib";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -38,11 +39,11 @@ function startOfToday(): Date {
   return d;
 }
 
-const MAX_OCR_PAGES = 20;
+const MAX_OCR_PAGES = 100;
+const OCR_CHUNK_PAGES = 10;
+const OCR_CONCURRENCY = 3;
 
-// Scanned PDFs have no text layer; GPT-4o-mini reads the pages directly.
-async function ocrPdfWithAI(buffer: Buffer, filename: string): Promise<string> {
-  if (!openai) throw new Error("AI is not configured");
+async function ocrChunk(buffer: Buffer, filename: string): Promise<string> {
   const resp = await (openai as any).responses.create({
     model: "gpt-4o-mini",
     input: [
@@ -63,6 +64,35 @@ async function ocrPdfWithAI(buffer: Buffer, filename: string): Promise<string> {
     ],
   });
   return (resp.output_text as string) || "";
+}
+
+// Scanned PDFs have no text layer; GPT-4o-mini reads the pages directly.
+// Long documents are split into page chunks (pdf-lib) and OCR'd in parallel.
+async function ocrPdfWithAI(buffer: Buffer, filename: string, numpages: number): Promise<string> {
+  if (!openai) throw new Error("AI is not configured");
+  if (numpages <= OCR_CHUNK_PAGES) return ocrChunk(buffer, filename);
+
+  const src = await PDFDocument.load(buffer, { ignoreEncryption: true });
+  const total = src.getPageCount();
+  const chunks: Buffer[] = [];
+  for (let start = 0; start < total; start += OCR_CHUNK_PAGES) {
+    const doc = await PDFDocument.create();
+    const idx = Array.from({ length: Math.min(OCR_CHUNK_PAGES, total - start) }, (_, i) => start + i);
+    const pages = await doc.copyPages(src, idx);
+    pages.forEach((p) => doc.addPage(p));
+    chunks.push(Buffer.from(await doc.save()));
+  }
+
+  const results: string[] = new Array(chunks.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < chunks.length) {
+      const i = next++;
+      results[i] = await ocrChunk(chunks[i], `${filename} (pages ${i * OCR_CHUNK_PAGES + 1}+)`);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(OCR_CONCURRENCY, chunks.length) }, worker));
+  return results.join("\n\n");
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -209,7 +239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (text.replace(/\s+/g, "").length < 50 && openai) {
           if ((parsed.numpages || 0) > MAX_OCR_PAGES) {
             return res.status(422).json({
-              message: `Scanned PDFs are limited to ${MAX_OCR_PAGES} pages during beta. Split the document and try again.`,
+              message: `Scanned PDFs are limited to ${MAX_OCR_PAGES} pages. Split the document and try again.`,
             });
           }
           // OCR costs money: reuse the same daily cap as material creation
@@ -218,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (today >= MAX_MATERIALS_PER_DAY) {
             return res.status(429).json({ message: "Daily limit reached for AI processing. Come back tomorrow!" });
           }
-          text = await ocrPdfWithAI(file.buffer, file.originalname);
+          text = await ocrPdfWithAI(file.buffer, file.originalname, parsed.numpages || 0);
         }
       } else if (name.endsWith(".docx") || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
         const mammoth = await import("mammoth");
@@ -233,7 +263,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!text) {
         return res.status(422).json({ message: "No text could be extracted from this file, even with OCR. Try a clearer scan or a different file." });
       }
-      const LIMIT = 20000;
+      const LIMIT = 24000;
       const truncated = text.length > LIMIT;
       if (truncated) text = text.slice(0, LIMIT);
       const suggestedTitle = (file.originalname || "Uploaded material").replace(/\.[^.]+$/, "");
