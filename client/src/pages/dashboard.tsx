@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowRight, Flame, Layers, ListChecks, Plus, Timer } from "lucide-react";
 import { Link, useLocation } from "wouter";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import Heatmap from "@/components/app/Heatmap";
 import { AnimatedKaeMark } from "@/components/app/BrandMark";
 import { useAuth } from "@/hooks/useAuth";
+import { apiRequest } from "@/lib/queryClient";
 
 type Analytics = {
   todayStats: { totalMinutes: number; sessionsCompleted: number; flashcardsReviewed: number; quizzesCompleted: number };
@@ -31,6 +32,7 @@ export default function Dashboard() {
     queryKey: ["/api/analytics/dashboard"],
     enabled: isAuthenticated,
   });
+  const queryClient = useQueryClient();
   const { data: materials = [] } = useQuery<Material[]>({
     queryKey: ["/api/study-materials"],
     enabled: isAuthenticated,
@@ -160,6 +162,18 @@ export default function Dashboard() {
             <div className="mt-6 rounded-xl border border-dashed border-border p-6 text-center">
               <p className="font-medium text-foreground">Nothing here yet</p>
               <p className="mt-1 text-sm text-muted-foreground">Upload notes and the AI builds your summaries, cards, and quizzes.</p>
+              <button
+                onClick={async () => {
+                  try {
+                    await apiRequest("POST", "/api/study-materials/sample");
+                    queryClient.invalidateQueries({ queryKey: ["/api/study-materials"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                  } catch {}
+                }}
+                className="mt-4 inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                Or try a sample material first
+              </button>
             </div>
           ) : (
             <ul className="mt-3 divide-y divide-border">

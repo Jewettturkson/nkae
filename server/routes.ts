@@ -274,9 +274,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+
+  // One-click sample material so new users see the product working
+  // without spending an AI generation.
+  app.post('/api/study-materials/sample', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const material = await storage.createStudyMaterial({
+        userId,
+        title: "How nkae works (sample)",
+        content:
+          "nkae is built on two ideas from learning science. First, retrieval practice: actively recalling information strengthens memory far more than re-reading it. Second, spaced repetition: reviews are most effective right before you would naturally forget, and each successful recall pushes the next review further out. nkae turns your notes into flashcards and quizzes (retrieval practice) and schedules your reviews on an expanding timeline (spaced repetition). If you add an exam date to a material, the schedule compresses so every card gets reviewed before the big day.",
+        summary:
+          "nkae combines retrieval practice (recalling beats re-reading) with spaced repetition (reviewing right before you forget). Your notes become flashcards and quizzes, and the review schedule expands with each success, or compresses toward an exam date.",
+        keyPoints: [
+          "Actively recalling information strengthens memory more than re-reading",
+          "Reviews are most effective right before you would naturally forget",
+          "Each successful recall pushes the next review further into the future",
+          "Adding an exam date compresses the schedule so everything is reviewed in time",
+        ],
+      } as any);
+
+      const cards = [
+        { front: "What is retrieval practice?", back: "Actively recalling information from memory, which strengthens it far more than re-reading. It is why nkae quizzes you instead of just showing you notes.", difficulty: 1 },
+        { front: "What is spaced repetition?", back: "Scheduling reviews right before you would naturally forget, with the gap growing after each successful recall.", difficulty: 1 },
+        { front: "What happens when you rate a card 'Easy'?", back: "Its next review moves further into the future, so you spend time on the cards you actually struggle with.", difficulty: 2 },
+        { front: "What does adding an exam date do?", back: "It compresses your review schedule so every card gets reviewed before the exam instead of drifting past it.", difficulty: 2 },
+      ];
+      for (const c of cards) {
+        await storage.createFlashcard({
+          studyMaterialId: material.id,
+          userId,
+          front: c.front,
+          back: c.back,
+          difficulty: c.difficulty,
+          nextReview: new Date(),
+        } as any);
+      }
+
+      const questions = [
+        {
+          question: "Which studying approach builds stronger memory?",
+          options: ["Re-reading notes several times", "Actively recalling the material", "Highlighting key sentences", "Listening to lectures again"],
+          correctAnswer: "Actively recalling the material",
+          explanation: "Retrieval practice (recalling) consistently beats passive review in memory research.",
+          difficulty: 1,
+        },
+        {
+          question: "When is a review most effective?",
+          options: ["Immediately after learning", "Right before you would naturally forget", "Only the night before an exam", "At the same time every day"],
+          correctAnswer: "Right before you would naturally forget",
+          explanation: "That is the core idea of spaced repetition, and it is how nkae schedules your cards.",
+          difficulty: 1,
+        },
+        {
+          question: "What happens to the review gap after each successful recall?",
+          options: ["It stays the same", "It shrinks", "It grows", "It resets to one day"],
+          correctAnswer: "It grows",
+          explanation: "Each success pushes the next review further out, so mastered cards take less of your time.",
+          difficulty: 2,
+        },
+      ];
+      for (const q of questions) {
+        await storage.createQuizQuestion({
+          studyMaterialId: material.id,
+          userId,
+          question: q.question,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          explanation: q.explanation,
+          difficulty: q.difficulty,
+        } as any);
+      }
+
+      res.json(await storage.getStudyMaterial(material.id));
+    } catch (error) {
+      console.error("Error creating sample material:", error);
+      res.status(500).json({ message: "Failed to create sample material" });
+    }
+  });
+
   app.post('/api/study-materials', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      if (req.body.examDate) {
+        const d = new Date(req.body.examDate);
+        req.body.examDate = isNaN(d.getTime()) ? null : d;
+      }
       const validation = insertStudyMaterialSchema.safeParse({
         ...req.body,
         userId,
@@ -519,7 +603,22 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
       if (wasCorrect) {
         daysUntilNext = Math.min(30, Math.pow(2, newStreak)); // Exponential backoff, max 30 days
       }
-      
+
+      // Exam-aware compression: if the material has an upcoming exam date,
+      // squeeze intervals so every card gets several passes before the exam.
+      if (flashcard.studyMaterialId) {
+        try {
+          const mat = await storage.getStudyMaterial(flashcard.studyMaterialId);
+          const exam = (mat as any)?.examDate ? new Date((mat as any).examDate) : null;
+          if (exam && exam.getTime() > now.getTime()) {
+            const daysToExam = (exam.getTime() - now.getTime()) / (24 * 60 * 60 * 1000);
+            // never schedule further out than a quarter of the remaining runway,
+            // and always land at least one review the day before the exam
+            daysUntilNext = Math.max(0.5, Math.min(daysUntilNext, daysToExam / 4, daysToExam - 1));
+          }
+        } catch {}
+      }
+
       const nextReview = new Date(now.getTime() + (daysUntilNext * 24 * 60 * 60 * 1000));
       
       const updated = await storage.updateFlashcard(id, {

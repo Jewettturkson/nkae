@@ -22,6 +22,7 @@ export default function NewMaterial() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [subjectId, setSubjectId] = useState<string>("");
+  const [examDate, setExamDate] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
@@ -143,6 +144,7 @@ export default function NewMaterial() {
       title: title.trim(),
       content: content.trim(),
       subjectId: subjectId ? parseInt(subjectId) : null,
+      examDate: examDate || null,
       userId: (user as any)?.id,
     });
   };
@@ -233,6 +235,21 @@ export default function NewMaterial() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="examDate" className="text-sm font-medium text-foreground/90">
+                      Exam date <span className="text-muted-foreground font-normal">(optional)</span>
+                    </Label>
+                    <Input
+                      id="examDate"
+                      type="date"
+                      value={examDate}
+                      min={new Date().toISOString().split("T")[0]}
+                      onChange={(e) => setExamDate(e.target.value)}
+                      className="h-12"
+                    />
+                    <p className="text-xs text-muted-foreground">Reviews compress so everything is covered before this day.</p>
                   </div>
                 </div>
 

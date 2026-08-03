@@ -65,6 +65,7 @@ export const studyMaterials = pgTable("study_materials", {
   tags: text("tags").array(),
   summary: text("summary"), // AI-generated summary
   keyPoints: text("key_points").array(), // AI-extracted key points
+  examDate: timestamp("exam_date"), // optional: reviews compress toward this date
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
