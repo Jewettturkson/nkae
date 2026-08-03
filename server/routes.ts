@@ -38,6 +38,33 @@ function startOfToday(): Date {
   return d;
 }
 
+const MAX_OCR_PAGES = 20;
+
+// Scanned PDFs have no text layer; GPT-4o-mini reads the pages directly.
+async function ocrPdfWithAI(buffer: Buffer, filename: string): Promise<string> {
+  if (!openai) throw new Error("AI is not configured");
+  const resp = await (openai as any).responses.create({
+    model: "gpt-4o-mini",
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_file",
+            filename: filename || "document.pdf",
+            file_data: `data:application/pdf;base64,${buffer.toString("base64")}`,
+          },
+          {
+            type: "input_text",
+            text: "Transcribe all text in this document in natural reading order. Output plain text only, no commentary. Preserve headings and paragraph breaks.",
+          },
+        ],
+      },
+    ],
+  });
+  return (resp.output_text as string) || "";
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
@@ -177,6 +204,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
         const parsed = await pdfParse(file.buffer);
         text = parsed.text || "";
+
+        // Scanned PDF (no text layer): fall back to AI OCR, within guardrails
+        if (text.replace(/\s+/g, "").length < 50 && openai) {
+          if ((parsed.numpages || 0) > MAX_OCR_PAGES) {
+            return res.status(422).json({
+              message: `Scanned PDFs are limited to ${MAX_OCR_PAGES} pages during beta. Split the document and try again.`,
+            });
+          }
+          // OCR costs money: reuse the same daily cap as material creation
+          const mats = await storage.getStudyMaterials(req.user.claims.sub);
+          const today = mats.filter((m: any) => m.createdAt && new Date(m.createdAt) >= startOfToday()).length;
+          if (today >= MAX_MATERIALS_PER_DAY) {
+            return res.status(429).json({ message: "Daily limit reached for AI processing. Come back tomorrow!" });
+          }
+          text = await ocrPdfWithAI(file.buffer, file.originalname);
+        }
       } else if (name.endsWith(".docx") || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
         const mammoth = await import("mammoth");
         const result = await mammoth.extractRawText({ buffer: file.buffer });
@@ -188,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
       if (!text) {
-        return res.status(422).json({ message: "No text could be extracted. Scanned PDFs need OCR, which is not supported yet." });
+        return res.status(422).json({ message: "No text could be extracted from this file, even with OCR. Try a clearer scan or a different file." });
       }
       const LIMIT = 20000;
       const truncated = text.length > LIMIT;
