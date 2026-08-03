@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Upload, FileText, Sparkles, ArrowLeft } from "lucide-react";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, authHeaders } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function NewMaterial() {
@@ -23,6 +23,46 @@ export default function NewMaterial() {
   const [content, setContent] = useState("");
   const [subjectId, setSubjectId] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File) {
+    const okTypes = [".pdf", ".docx", ".txt"];
+    if (!okTypes.some((t) => file.name.toLowerCase().endsWith(t))) {
+      toast({ title: "Unsupported file", description: "Upload a PDF, DOCX, or TXT file.", variant: "destructive" });
+      return;
+    }
+    setIsExtracting(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/study-materials/extract", {
+        method: "POST",
+        headers: await authHeaders(), // no Content-Type: the browser sets the multipart boundary
+        body: form,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).message || "Extraction failed");
+      }
+      const data = await res.json();
+      setContent(data.text);
+      if (!title.trim()) setTitle(data.suggestedTitle);
+      setUploadedFileName(file.name);
+      toast({
+        title: "Text extracted",
+        description: data.truncated
+          ? "Long document: the first part was imported. Review before creating."
+          : `${file.name} imported. Review the text, then create.`,
+      });
+    } catch (e: any) {
+      toast({ title: "Could not read file", description: e.message, variant: "destructive" });
+    }
+    setIsExtracting(false);
+  }
 
   // Fetch subjects for dropdown
   const { data: subjects } = useQuery({
@@ -191,6 +231,50 @@ export default function NewMaterial() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) handleFile(f);
+                  }}
+                  className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+                    isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload a PDF, DOCX, or TXT file"
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleFile(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Upload className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
+                  {isExtracting ? (
+                    <p className="text-sm text-muted-foreground">Extracting text…</p>
+                  ) : uploadedFileName ? (
+                    <p className="text-sm text-foreground">
+                      <span className="font-medium">{uploadedFileName}</span> imported. Drop another file to replace it.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-foreground">Drop a PDF, DOCX, or TXT here</p>
+                      <p className="text-xs text-muted-foreground mt-1">or click to browse. We extract the text for you, then AI does the rest.</p>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-2">

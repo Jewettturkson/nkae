@@ -1,3 +1,4 @@
+import multer from "multer";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -17,6 +18,12 @@ import OpenAI from "openai";
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY 
 }) : null;
+
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -140,6 +147,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching study material:", error);
       res.status(500).json({ message: "Failed to fetch study material" });
+    }
+  });
+
+
+  // Extract text from an uploaded PDF, DOCX, or TXT file.
+  // Returns the text so the client can reuse the normal create + AI flow.
+  app.post('/api/study-materials/extract', isAuthenticated, upload.single('file'), async (req: any, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ message: "No file uploaded" });
+      const name = (file.originalname || "").toLowerCase();
+      let text = "";
+      if (name.endsWith(".pdf") || file.mimetype === "application/pdf") {
+        // deep import skips pdf-parse's debug harness, which breaks under bundlers
+        const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
+        const parsed = await pdfParse(file.buffer);
+        text = parsed.text || "";
+      } else if (name.endsWith(".docx") || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+        const mammoth = await import("mammoth");
+        const result = await mammoth.extractRawText({ buffer: file.buffer });
+        text = result.value || "";
+      } else if (name.endsWith(".txt") || (file.mimetype || "").startsWith("text/")) {
+        text = file.buffer.toString("utf8");
+      } else {
+        return res.status(400).json({ message: "Unsupported file type. Upload a PDF, DOCX, or TXT file." });
+      }
+      text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+      if (!text) {
+        return res.status(422).json({ message: "No text could be extracted. Scanned PDFs need OCR, which is not supported yet." });
+      }
+      const LIMIT = 20000;
+      const truncated = text.length > LIMIT;
+      if (truncated) text = text.slice(0, LIMIT);
+      const suggestedTitle = (file.originalname || "Uploaded material").replace(/\.[^.]+$/, "");
+      res.json({ text, truncated, suggestedTitle });
+    } catch (error) {
+      console.error("File extraction failed:", error);
+      res.status(500).json({ message: "Failed to extract text from that file" });
     }
   });
 

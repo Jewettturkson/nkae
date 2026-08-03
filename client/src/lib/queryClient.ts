@@ -1,7 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getIdToken } from "./firebase";
 
-async function authHeaders(): Promise<Record<string, string>> {
+export async function authHeaders(): Promise<Record<string, string>> {
   const token = await getIdToken().catch(() => null);
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
