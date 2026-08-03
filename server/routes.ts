@@ -25,6 +25,19 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
 });
 
+
+// ---- AI cost guardrails (beta) ----
+// Bounds worst-case OpenAI spend per user per day. Durable across restarts
+// because it counts rows in the database rather than in-memory state.
+const MAX_MATERIALS_PER_DAY = 10;
+const MAX_AI_CONTENT_CHARS = 24000;
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
@@ -199,7 +212,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validation.success) {
         return res.status(400).json({ message: "Invalid study material data", errors: validation.error });
       }
-      
+
+      // Beta guardrail: cap materials (and therefore AI generations) per user per day
+      const existing = await storage.getStudyMaterials(userId);
+      const createdToday = existing.filter(
+        (m: any) => m.createdAt && new Date(m.createdAt) >= startOfToday()
+      ).length;
+      if (createdToday >= MAX_MATERIALS_PER_DAY) {
+        return res.status(429).json({
+          message: `Daily limit reached: ${MAX_MATERIALS_PER_DAY} materials per day during beta. Come back tomorrow!`,
+        });
+      }
+
       let material = await storage.createStudyMaterial(validation.data);
       
       // Generate AI summary and key points if content is provided
@@ -214,7 +238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               },
               {
                 role: "user",
-                content: `Please analyze this study material:\n\nTitle: ${validation.data.title}\n\nContent: ${validation.data.content}`
+                content: `Please analyze this study material:\n\nTitle: ${validation.data.title}\n\nContent: ${(validation.data.content || "").slice(0, MAX_AI_CONTENT_CHARS)}`
               }
             ],
             response_format: { type: "json_object" },
@@ -292,7 +316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             role: "user",
             content: `Title: ${material.title}
 
-Content: ${material.content}`,
+Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
           },
         ],
         response_format: { type: "json_object" },

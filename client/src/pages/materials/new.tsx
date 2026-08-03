@@ -106,12 +106,15 @@ export default function NewMaterial() {
       
       setLocation(`/materials/${material.id}`);
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to create study material. Please try again.",
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      // Server messages (e.g. the daily beta limit) come through as "429: {json}"
+      const raw = String(error?.message || "");
+      let description = "Failed to create study material. Please try again.";
+      const jsonStart = raw.indexOf("{");
+      if (jsonStart !== -1) {
+        try { description = JSON.parse(raw.slice(jsonStart)).message || description; } catch {}
+      }
+      toast({ title: "Could not create material", description, variant: "destructive" });
     },
   });
 
