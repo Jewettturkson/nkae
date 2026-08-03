@@ -14,7 +14,7 @@ import {
   insertStudyGoalSchema,
 } from "@shared/schema";
 import { z } from "zod";
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 
 // Initialize OpenAI
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ 
@@ -24,7 +24,7 @@ const openai = process.env.OPENAI_API_KEY ? new OpenAI({
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB (OpenAI audio transcription cap)
 });
 
 
@@ -257,8 +257,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         text = result.value || "";
       } else if (name.endsWith(".txt") || (file.mimetype || "").startsWith("text/")) {
         text = file.buffer.toString("utf8");
+      } else if (
+        [".mp3", ".m4a", ".wav", ".webm", ".ogg", ".mpga", ".mpeg", ".mp4"].some((ext) => name.endsWith(ext)) ||
+        (file.mimetype || "").startsWith("audio/")
+      ) {
+        if (!openai) return res.status(400).json({ message: "AI is not configured on the server." });
+        // Transcription costs money: reuse the daily cap
+        const mats = await storage.getStudyMaterials(req.user.claims.sub);
+        const today = mats.filter((m: any) => m.createdAt && new Date(m.createdAt) >= startOfToday()).length;
+        if (today >= MAX_MATERIALS_PER_DAY) {
+          return res.status(429).json({ message: "Daily limit reached for AI processing. Come back tomorrow!" });
+        }
+        const audioFile = await toFile(file.buffer, file.originalname || "audio.mp3");
+        const transcription = await openai.audio.transcriptions.create({
+          file: audioFile,
+          model: "gpt-4o-mini-transcribe",
+        });
+        text = (transcription.text || "").trim();
       } else {
-        return res.status(400).json({ message: "Unsupported file type. Upload a PDF, DOCX, or TXT file." });
+        return res.status(400).json({ message: "Unsupported file type. Upload a PDF, DOCX, TXT, or an audio recording (MP3, M4A, WAV)." });
       }
       text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
       if (!text) {

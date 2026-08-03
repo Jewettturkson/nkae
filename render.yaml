@@ -3,7 +3,7 @@ services:
     name: nkae
     runtime: node
     plan: free
-    buildCommand: npm ci --include=dev && npm run db:push -- --force && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /
     envVars:

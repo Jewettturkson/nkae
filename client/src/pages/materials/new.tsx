@@ -30,9 +30,9 @@ export default function NewMaterial() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
-    const okTypes = [".pdf", ".docx", ".txt"];
+    const okTypes = [".pdf", ".docx", ".txt", ".mp3", ".m4a", ".wav", ".webm", ".ogg"];
     if (!okTypes.some((t) => file.name.toLowerCase().endsWith(t))) {
-      toast({ title: "Unsupported file", description: "Upload a PDF, DOCX, or TXT file.", variant: "destructive" });
+      toast({ title: "Unsupported file", description: "Upload a PDF, DOCX, TXT, or an audio recording (MP3, M4A, WAV).", variant: "destructive" });
       return;
     }
     setIsExtracting(true);
@@ -268,13 +268,13 @@ export default function NewMaterial() {
                   }`}
                   role="button"
                   tabIndex={0}
-                  aria-label="Upload a PDF, DOCX, or TXT file"
+                  aria-label="Upload a PDF, DOCX, TXT, or audio file"
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
                 >
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    accept=".pdf,.docx,.txt,.mp3,.m4a,.wav,.webm,.ogg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,audio/*"
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
@@ -284,14 +284,14 @@ export default function NewMaterial() {
                   />
                   <Upload className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
                   {isExtracting ? (
-                    <p className="text-sm text-muted-foreground">Extracting text…</p>
+                    <p className="text-sm text-muted-foreground">Extracting text… (audio can take a minute or two)</p>
                   ) : uploadedFileName ? (
                     <p className="text-sm text-foreground">
                       <span className="font-medium">{uploadedFileName}</span> imported. Drop another file to replace it.
                     </p>
                   ) : (
                     <>
-                      <p className="text-sm font-medium text-foreground">Drop a PDF, DOCX, or TXT here</p>
+                      <p className="text-sm font-medium text-foreground">Drop a PDF, DOCX, TXT, or lecture audio here</p>
                       <p className="text-xs text-muted-foreground mt-1">or click to browse. We extract the text for you, then AI does the rest.</p>
                     </>
                   )}
