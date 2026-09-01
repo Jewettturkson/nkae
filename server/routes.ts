@@ -27,6 +27,37 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB (OpenAI audio transcription cap)
 });
 
+// None of our extraction paths (pdf-parse, mammoth, Whisper, GPT-4o OCR)
+// return real per-word confidence scores, so this is a heuristic pass over
+// the plain text looking for the shapes bad extraction actually produces:
+// a wall of symbols where letters should be, OCR merging words together
+// with no spaces, or spacing artifacts that break words into single
+// characters. It flags lines to look at, it does not claim to know which
+// words are wrong.
+function flagLowConfidenceLines(text: string): number[] {
+  const lines = text.split("\n");
+  const flagged: number[] = [];
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    if (trimmed.length < 4) return; // too short to judge either way
+
+    const letters = trimmed.replace(/[^a-zA-Z]/g, "").length;
+    const symbolRatio = 1 - letters / trimmed.length;
+    const hasGiantWord = /\S{40,}/.test(trimmed); // OCR merged multiple words together
+    const isChoppedUp = (() => {
+      const words = trimmed.split(/\s+/);
+      if (words.length < 6) return false;
+      const singleChar = words.filter((w) => w.length === 1).length;
+      return singleChar / words.length > 0.4; // spacing broke words into letters
+    })();
+
+    if (symbolRatio > 0.4 || hasGiantWord || isChoppedUp) {
+      flagged.push(i);
+    }
+  });
+  return flagged;
+}
+
 // Turns the spaced repetition scheduling decision into a short, human
 // readable reason. Nothing here is stored, it is derived each request from
 // fields already on the flashcard (correctStreak, totalReviews, nextReview),
@@ -317,7 +348,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const truncated = text.length > LIMIT;
       if (truncated) text = text.slice(0, LIMIT);
       const suggestedTitle = (file.originalname || "Uploaded material").replace(/\.[^.]+$/, "");
-      res.json({ text, truncated, suggestedTitle });
+      const flaggedLines = flagLowConfidenceLines(text);
+      res.json({ text, truncated, suggestedTitle, flaggedLines });
     } catch (error) {
       console.error("File extraction failed:", error);
       res.status(500).json({ message: "Failed to extract text from that file" });

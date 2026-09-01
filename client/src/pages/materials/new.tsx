@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Upload, FileText, Sparkles, ArrowLeft, Mic, Square } from "lucide-react";
+import { Upload, FileText, Sparkles, ArrowLeft, Mic, Square, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,16 @@ export default function NewMaterial() {
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  // Lines the extractor is unsure about (garbled OCR, merged words, broken
+  // spacing) and whether the document was too long to import in full. Both
+  // come back from the same extract call, and both go stale the moment the
+  // user hand edits the text, so any manual edit clears them rather than
+  // showing a highlight that no longer matches what's on screen.
+  const [flaggedLines, setFlaggedLines] = useState<number[]>([]);
+  const [truncated, setTruncated] = useState(false);
+  const [flagCursor, setFlagCursor] = useState(0);
 
   async function handleFile(file: File) {
     const okTypes = [".pdf", ".docx", ".txt", ".mp3", ".m4a", ".wav", ".webm", ".ogg"];
@@ -53,6 +63,9 @@ export default function NewMaterial() {
       setContent(data.text);
       if (!title.trim()) setTitle(data.suggestedTitle);
       setUploadedFileName(file.name);
+      setTruncated(!!data.truncated);
+      setFlaggedLines(Array.isArray(data.flaggedLines) ? data.flaggedLines : []);
+      setFlagCursor(0);
       toast({
         title: "Text extracted",
         description: data.truncated
@@ -64,6 +77,24 @@ export default function NewMaterial() {
     }
     setIsExtracting(false);
   }
+
+  // Jumps to and selects a flagged line inside the actual textarea, so
+  // "review this" means something concrete instead of just a warning label.
+  function jumpToLine(lineIndex: number) {
+    const el = contentRef.current;
+    if (!el) return;
+    const lines = content.split("\n");
+    let start = 0;
+    for (let i = 0; i < lineIndex; i++) start += lines[i].length + 1;
+    const end = start + (lines[lineIndex]?.length || 0);
+    el.focus();
+    el.setSelectionRange(start, end);
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setFlagCursor(flaggedLines.indexOf(lineIndex));
+  }
+
+  const contentLines = useMemo(() => content.split("\n"), [content]);
+  const flaggedSet = useMemo(() => new Set(flaggedLines), [flaggedLines]);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
@@ -385,10 +416,61 @@ export default function NewMaterial() {
                   <Label htmlFor="content" className="text-sm font-medium text-foreground/90">
                     Content *
                   </Label>
+
+                  {truncated ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span>This document was long, only the first part was imported. Review before creating.</span>
+                    </div>
+                  ) : null}
+
+                  {flaggedLines.length > 0 ? (
+                    <>
+                      <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                        <span className="flex items-center gap-2">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          {flaggedLines.length} {flaggedLines.length === 1 ? "line" : "lines"} may not have imported cleanly, worth a second look.
+                        </span>
+                        <button
+                          type="button"
+                          className="shrink-0 underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-300"
+                          onClick={() => jumpToLine(flaggedLines[flagCursor % flaggedLines.length])}
+                        >
+                          Jump to next
+                        </button>
+                      </div>
+
+                      {/* Notebook-style read preview: the source of truth is still the textarea below,
+                          this is just a scannable view with the uncertain lines underlined. */}
+                      <div className="index-card max-h-48 overflow-y-auto rounded-xl border border-border p-4 pl-8 text-sm leading-relaxed">
+                        {contentLines.map((line, i) => (
+                          <p
+                            key={i}
+                            onClick={() => jumpToLine(i)}
+                            className={
+                              flaggedSet.has(i)
+                                ? "cursor-pointer rounded px-1 text-amber-700 underline decoration-amber-500 decoration-2 underline-offset-4 hover:bg-amber-500/10 dark:text-amber-400"
+                                : "px-1 text-foreground/80"
+                            }
+                          >
+                            {line || " "}
+                          </p>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
+
                   <Textarea
                     id="content"
+                    ref={contentRef}
                     value={content}
-                    onChange={(e) => setContent(e.target.value)}
+                    onChange={(e) => {
+                      setContent(e.target.value);
+                      // the text just diverged from what the extractor scored, so stop
+                      // pointing at line numbers that may no longer mean anything
+                      if (flaggedLines.length > 0) setFlaggedLines([]);
+                      if (truncated) setTruncated(false);
+                    }}
                     placeholder="Paste your lecture notes, textbook chapters, or study materials here..."
                     className="min-h-[300px] resize-none"
                     required
