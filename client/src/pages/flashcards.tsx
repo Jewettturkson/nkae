@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { RotateCcw, Layers } from "lucide-react";
+import { RotateCcw, Layers, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -13,6 +13,7 @@ type Flashcard = {
   correctStreak: number | null;
   totalReviews: number | null;
   nextReview: string | null;
+  reviewReason: string | null;
 };
 
 export default function Flashcards() {
@@ -92,6 +93,16 @@ export default function Flashcards() {
         </button>
       </div>
       <Progress value={(index / cards.length) * 100} className="mb-8" />
+
+      {card.reviewReason ? (
+        <div
+          key={`reason-${card.id}`}
+          className="mb-4 flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400"
+        >
+          <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+          <span>{card.reviewReason}</span>
+        </div>
+      ) : null}
 
       <AnimatePresence mode="popLayout">
         <motion.div

@@ -27,6 +27,38 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB (OpenAI audio transcription cap)
 });
 
+// Turns the spaced repetition scheduling decision into a short, human
+// readable reason. Nothing here is stored, it is derived each request from
+// fields already on the flashcard (correctStreak, totalReviews, nextReview),
+// so this ships with no migration and stays honest: the copy always matches
+// whatever the scheduler in the /review route actually decided.
+function reasonForCard(card: {
+  totalReviews?: number | null;
+  correctStreak?: number | null;
+  lastReviewed?: string | Date | null;
+  nextReview?: string | Date | null;
+}): string | null {
+  const totalReviews = card.totalReviews || 0;
+  const correctStreak = card.correctStreak || 0;
+
+  if (totalReviews === 0) return null; // never reviewed, nothing to explain yet
+
+  const overdue = card.nextReview ? new Date(card.nextReview).getTime() <= Date.now() : true;
+
+  if (correctStreak === 0) {
+    return overdue
+      ? "Back because you missed this last time."
+      : "You missed this last time, showing it again soon.";
+  }
+  if (correctStreak === 1) {
+    return "First correct recall, interval is still short.";
+  }
+  if (correctStreak >= 2 && correctStreak <= 4) {
+    return `Interval increased, you've had this right ${correctStreak} times in a row.`;
+  }
+  return "Long interval now, this one is close to mastered.";
+}
+
 
 // ---- AI cost guardrails (beta) ----
 // Bounds worst-case OpenAI spend per user per day. Durable across restarts
@@ -471,8 +503,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         due: due === 'true',
         limit: parseInt(limit as string),
       });
-      
-      res.json(flashcards);
+
+      // Surface why a card is showing up now, so the spaced repetition
+      // schedule reads as a reason instead of a black box. Derived from
+      // fields already on the card, no schema change needed.
+      const withReason = flashcards.map((card: any) => ({
+        ...card,
+        reviewReason: reasonForCard(card),
+      }));
+
+      res.json(withReason);
     } catch (error) {
       console.error("Error fetching flashcards:", error);
       res.status(500).json({ message: "Failed to fetch flashcards" });
