@@ -55,8 +55,8 @@ export default function Flashcards() {
     return (
       <div className="mx-auto max-w-xl px-4 py-24 text-center">
         <Layers className="mx-auto mb-4 h-10 w-10 text-indigo-300" />
-        <h1 className="text-xl font-semibold text-gray-900">No flashcards yet</h1>
-        <p className="mt-2 text-gray-500">Upload study material and generate flashcards to start reviewing.</p>
+        <h1 className="text-xl font-semibold text-foreground">No flashcards yet</h1>
+        <p className="mt-2 text-muted-foreground">Upload study material and generate flashcards to start reviewing.</p>
         <Button className="mt-6" onClick={() => (window.location.href = "/materials/new")}>Upload material</Button>
       </div>
     );
@@ -65,8 +65,8 @@ export default function Flashcards() {
   if (done) {
     return (
       <div className="mx-auto max-w-xl px-4 py-24 text-center">
-        <h1 className="text-3xl font-bold text-gray-900">Session complete</h1>
-        <p className="mt-3 text-lg text-gray-600">
+        <h1 className="text-3xl font-bold text-foreground">Session complete</h1>
+        <p className="mt-3 text-lg text-muted-foreground">
           {correctCount} of {cards.length} correct. Cards you missed will come back sooner: that&rsquo;s spaced repetition working.
         </p>
         <Button
@@ -86,7 +86,7 @@ export default function Flashcards() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-6 flex items-center justify-between text-sm text-gray-500">
+      <div className="mb-6 flex items-center justify-between text-sm text-muted-foreground">
         <span>Card {index + 1} of {cards.length}{showAll ? "" : " due"}</span>
         <button type="button" className="underline underline-offset-2 hover:text-indigo-600" onClick={() => { setShowAll((v) => !v); setIndex(0); }}>
           {showAll ? "Show due only" : "Show all cards"}
