@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { RotateCcw, Layers, RefreshCw } from "lucide-react";
+import { RotateCcw, Layers, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+
+type RegenerateDirection = "harder" | "easier" | "reword";
 
 type Flashcard = {
   id: number;
@@ -34,6 +36,24 @@ export default function Flashcards() {
     mutationFn: ({ id, correct }: { id: number; correct: boolean }) =>
       apiRequest("PATCH", `/api/flashcards/${id}/review`, { correct }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] }),
+  });
+
+  // Rewords or re-levels the card in place. Deliberately not a review: it
+  // doesn't touch correctStreak/nextReview, it just changes what the
+  // question says. "This was too easy" and "I got this right" are different
+  // signals, so they get different controls instead of both being buried in
+  // one four option grading scale.
+  const regenerate = useMutation({
+    mutationFn: async ({ id, direction }: { id: number; direction: RegenerateDirection }) => {
+      const res = await apiRequest("POST", `/api/flashcards/${id}/regenerate`, { direction });
+      return (await res.json()) as Flashcard;
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData<Flashcard[]>(["/api/flashcards"], (prev) =>
+        prev ? prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)) : prev,
+      );
+      setFlipped(false);
+    },
   });
 
   const done = index >= cards.length && cards.length > 0;
@@ -136,21 +156,51 @@ export default function Flashcards() {
       </AnimatePresence>
 
       {flipped ? (
-        <div className="mt-8 grid grid-cols-4 gap-2">
-          {/* maps to the server's correct boolean: Again=false, the rest=true */}
-          <Button variant="outline" className="h-12 rounded-xl border-destructive/40 text-destructive hover:bg-destructive/10" onClick={() => grade(false)}>
-            Again
-          </Button>
-          <Button variant="outline" className="h-12 rounded-xl border-amber-400/50 text-amber-600 hover:bg-amber-500/10" onClick={() => grade(true)}>
-            Hard
-          </Button>
-          <Button variant="outline" className="h-12 rounded-xl border-primary/40 text-primary hover:bg-primary/10" onClick={() => grade(true)}>
-            Good
-          </Button>
-          <Button className="h-12 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => grade(true)}>
-            Easy
-          </Button>
-        </div>
+        <>
+          <div className="mt-8 grid grid-cols-2 gap-3">
+            <Button variant="outline" className="h-12 rounded-xl border-destructive/40 text-destructive hover:bg-destructive/10" onClick={() => grade(false)}>
+              Missed it
+            </Button>
+            <Button className="h-12 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => grade(true)}>
+              Got it
+            </Button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Sparkles className="h-3.5 w-3.5" /> Question wasn&rsquo;t right for you?
+            </span>
+            <button
+              type="button"
+              disabled={regenerate.isPending}
+              className="underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+              onClick={() => regenerate.mutate({ id: card.id, direction: "easier" })}
+            >
+              Make it easier
+            </button>
+            <span>·</span>
+            <button
+              type="button"
+              disabled={regenerate.isPending}
+              className="underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+              onClick={() => regenerate.mutate({ id: card.id, direction: "harder" })}
+            >
+              Make it harder
+            </button>
+            <span>·</span>
+            <button
+              type="button"
+              disabled={regenerate.isPending}
+              className="underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+              onClick={() => regenerate.mutate({ id: card.id, direction: "reword" })}
+            >
+              Reword it
+            </button>
+          </div>
+          {regenerate.isPending ? (
+            <p className="mt-2 text-center text-xs text-muted-foreground">Rewriting this card&hellip;</p>
+          ) : null}
+        </>
       ) : (
         <p className="mt-8 text-center text-sm text-muted-foreground">Think of the answer, then tap the card.</p>
       )}

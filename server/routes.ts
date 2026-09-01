@@ -712,6 +712,74 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
     }
   });
 
+  // Rewrites a single card at a different difficulty, or in different words
+  // at the same difficulty. This is deliberately separate from /review:
+  // correct/incorrect drives the spaced repetition schedule, this route
+  // drives what the question actually says. Keeping them separate means
+  // "that was too easy" no longer has to be faked as a correct answer.
+  app.post('/api/flashcards/:id/regenerate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { direction } = req.body as { direction?: "harder" | "easier" | "reword" };
+
+      if (!openai) {
+        return res.status(400).json({ message: "AI is not configured on the server." });
+      }
+      if (direction !== "harder" && direction !== "easier" && direction !== "reword") {
+        return res.status(400).json({ message: "direction must be 'harder', 'easier', or 'reword'" });
+      }
+
+      const flashcard = await storage.getFlashcard(id);
+      if (!flashcard || flashcard.userId !== userId) {
+        return res.status(404).json({ message: "Flashcard not found or access denied" });
+      }
+
+      const steer: Record<typeof direction, string> = {
+        harder: "Rewrite this as a noticeably harder question testing the same underlying concept: more specific, more application based, fewer hints in the phrasing.",
+        easier: "Rewrite this as a noticeably easier question testing the same underlying concept: more direct, more scaffolded, clearer phrasing.",
+        reword: "Rewrite this with different wording that tests the exact same concept at the same difficulty, so it feels like a fresh question rather than a memorized phrase.",
+      };
+
+      const aiResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You rewrite a single study flashcard. Respond with JSON: { \"front\": \"question\", \"back\": \"answer\" }. Keep the same underlying concept as the original card.",
+          },
+          {
+            role: "user",
+            content: `Original card:\nFront: ${flashcard.front}\nBack: ${flashcard.back}\n\n${steer[direction]}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const ai = JSON.parse(aiResponse.choices[0].message.content || "{}");
+      if (!ai.front || !ai.back) {
+        return res.status(500).json({ message: "AI did not return a usable card" });
+      }
+
+      const nextDifficulty =
+        direction === "harder" ? Math.min(5, (flashcard.difficulty || 1) + 1)
+        : direction === "easier" ? Math.max(1, (flashcard.difficulty || 1) - 1)
+        : (flashcard.difficulty || 1);
+
+      const updated = await storage.updateFlashcard(id, {
+        front: ai.front,
+        back: ai.back,
+        difficulty: nextDifficulty,
+      });
+
+      res.json({ ...updated, reviewReason: reasonForCard(updated as any) });
+    } catch (error) {
+      console.error("Error regenerating flashcard:", error);
+      res.status(500).json({ message: "Failed to regenerate flashcard" });
+    }
+  });
+
   // Quiz routes
   app.get('/api/quiz-questions', isAuthenticated, async (req: any, res) => {
     try {
