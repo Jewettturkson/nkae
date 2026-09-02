@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Layers, ListChecks, Moon, Plus, Sun, Timer, User } from "lucide-react";
+import { LayoutDashboard, Layers, ListChecks, Moon, Plus, Sparkles, Sun, Timer, User } from "lucide-react";
 import KaeWordmark from "./BrandMark";
 import { toggleTheme } from "@/lib/theme";
 
@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/quiz", label: "Quiz", icon: ListChecks },
   { href: "/timer", label: "Focus", icon: Timer },
   { href: "/materials/new", label: "Upload", icon: Plus },
+  { href: "/concepts", label: "Knowledge", icon: Sparkles },
   { href: "/profile", label: "Me", icon: User },
 ];
 

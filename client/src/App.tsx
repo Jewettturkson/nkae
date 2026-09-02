@@ -14,6 +14,7 @@ import Flashcards from "@/pages/flashcards";
 import Quiz from "@/pages/quiz";
 import Timer from "@/pages/timer";
 import MaterialDetail from "@/pages/materials/detail";
+import Concepts from "@/pages/concepts";
 import AppNav from "@/components/app/AppNav";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -40,6 +41,7 @@ function AppRoutes() {
         <Route path="/materials/new" component={NewMaterial} />
         <Route path="/materials/:id" component={MaterialDetail} />
         <Route path="/timer" component={Timer} />
+        <Route path="/concepts" component={Concepts} />
         <Route component={NotFound} />
       </Switch>
     </>

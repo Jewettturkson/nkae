@@ -1,6 +1,7 @@
 import {
   users,
   subjects,
+  concepts,
   studyMaterials,
   flashcards,
   quizQuestions,
@@ -11,6 +12,8 @@ import {
   type UpsertUser,
   type Subject,
   type InsertSubject,
+  type Concept,
+  type InsertConcept,
   type StudyMaterial,
   type InsertStudyMaterial,
   type StudyMaterialWithDetails,
@@ -44,6 +47,11 @@ export interface IStorage {
   updateSubject(id: number, updates: Partial<InsertSubject>): Promise<Subject | undefined>;
   deleteSubject(id: number): Promise<boolean>;
 
+  // Concept operations (auto-populated at card generation time)
+  getConceptsBySubject(subjectId: number): Promise<Concept[]>;
+  getOrCreateConcept(subjectId: number, label: string): Promise<Concept>;
+  getConceptGraphCards(subjectId: number): Promise<{ id: number; conceptId: number | null; studyMaterialId: number | null; correctStreak: number | null; totalReviews: number | null }[]>;
+
   // Study materials operations
   getStudyMaterials(userId: string, filters?: { subjectId?: number; search?: string; limit?: number; offset?: number }): Promise<StudyMaterialWithDetails[]>;
   getStudyMaterial(id: number): Promise<StudyMaterialWithDetails | undefined>;
@@ -52,7 +60,7 @@ export interface IStorage {
   deleteStudyMaterial(id: number): Promise<boolean>;
 
   // Flashcard operations
-  getFlashcards(filters: { userId?: string; studyMaterialId?: number; due?: boolean; limit?: number }): Promise<FlashcardWithDetails[]>;
+  getFlashcards(filters: { userId?: string; studyMaterialId?: number; conceptId?: number; due?: boolean; limit?: number }): Promise<FlashcardWithDetails[]>;
   getFlashcard(id: number): Promise<Flashcard | undefined>;
   createFlashcard(flashcard: InsertFlashcard): Promise<Flashcard>;
   updateFlashcard(id: number, updates: Partial<InsertFlashcard>): Promise<Flashcard | undefined>;
@@ -133,6 +141,41 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
+  // Concept operations
+  async getConceptsBySubject(subjectId: number): Promise<Concept[]> {
+    return await db.select().from(concepts).where(eq(concepts.subjectId, subjectId)).orderBy(asc(concepts.label));
+  }
+
+  // Case-insensitive match within the subject so the AI saying "Krebs Cycle"
+  // one time and "krebs cycle" another doesn't fork into two nodes.
+  async getOrCreateConcept(subjectId: number, label: string): Promise<Concept> {
+    const clean = label.trim().slice(0, 100);
+    const existing = await db
+      .select()
+      .from(concepts)
+      .where(and(eq(concepts.subjectId, subjectId), sql`lower(${concepts.label}) = lower(${clean})`));
+    if (existing[0]) return existing[0];
+    const [created] = await db.insert(concepts).values({ subjectId, label: clean }).returning();
+    return created;
+  }
+
+  // Minimal fields needed to derive the knowledge graph live: mastery per
+  // concept (from correctStreak/totalReviews, same signal reviewReason
+  // already uses) and edges from concepts that co-occur on the same
+  // material. Nothing here is stored, it's recomputed on each request.
+  async getConceptGraphCards(subjectId: number) {
+    return await db
+      .select({
+        id: flashcards.id,
+        conceptId: flashcards.conceptId,
+        studyMaterialId: flashcards.studyMaterialId,
+        correctStreak: flashcards.correctStreak,
+        totalReviews: flashcards.totalReviews,
+      })
+      .from(flashcards)
+      .where(eq(flashcards.subjectId, subjectId));
+  }
+
   // Study materials operations
   async getStudyMaterials(
     userId: string,
@@ -188,10 +231,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Flashcard operations  
-  async getFlashcards(filters: { userId?: string; studyMaterialId?: number; due?: boolean; limit?: number }): Promise<FlashcardWithDetails[]> {
+  async getFlashcards(filters: { userId?: string; studyMaterialId?: number; conceptId?: number; due?: boolean; limit?: number }): Promise<FlashcardWithDetails[]> {
     const conditions = [];
     if (filters.userId) conditions.push(eq(flashcards.userId, filters.userId));
     if (filters.studyMaterialId) conditions.push(eq(flashcards.studyMaterialId, filters.studyMaterialId));
+    if (filters.conceptId) conditions.push(eq(flashcards.conceptId, filters.conceptId));
     if (filters.due) conditions.push(sql`(${flashcards.nextReview} IS NULL OR ${flashcards.nextReview} <= NOW())`);
     const rows = await db.query.flashcards.findMany({
       where: conditions.length ? and(...conditions) : undefined,

@@ -168,6 +168,9 @@ export default function Dashboard() {
             <h2 className="font-semibold text-foreground">Weekly goal</h2>
             <span className="text-sm text-muted-foreground">{Math.round(weekMinutes / 60 * 10) / 10}h of {Math.round(goal / 60)}h</span>
           </div>
+          <Link href="/concepts" className="mt-1 inline-block text-xs font-medium text-primary hover:underline">
+            View your knowledge map →
+          </Link>
           <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-secondary">
             <motion.div
               initial={{ width: 0 }}

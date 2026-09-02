@@ -22,9 +22,19 @@ type Flashcard = {
 };
 
 export default function Flashcards() {
-  const { data: allCards = [], isLoading } = useQuery<Flashcard[]>({ queryKey: ["/api/flashcards"] });
+  // Arriving from the knowledge map filters straight to one concept's cards,
+  // so "tap a node" actually goes somewhere instead of just decorating a page.
+  const params = new URLSearchParams(window.location.search);
+  const conceptId = params.get("conceptId");
+  const conceptLabel = params.get("label");
+
+  const { data: allCards = [], isLoading } = useQuery<Flashcard[]>({
+    queryKey: [`/api/flashcards${conceptId ? `?conceptId=${conceptId}` : ""}`],
+  });
   const { data: subjects = [] } = useQuery<Subject[]>({ queryKey: ["/api/subjects"] });
-  const [showAll, setShowAll] = useState(false);
+  // Coming from the knowledge map means "show me this concept's cards," not
+  // "only the ones due today," so that filter starts open in that case.
+  const [showAll, setShowAll] = useState(!!conceptId);
   const cards = useMemo(() => {
     if (showAll) return allCards;
     const now = Date.now();
@@ -125,6 +135,12 @@ export default function Flashcards() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
+      {conceptId ? (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
+          <span>Showing cards for {conceptLabel || "this concept"}</span>
+          <a href="/flashcards" className="underline underline-offset-2 hover:text-foreground">Clear filter</a>
+        </div>
+      ) : null}
       <div className="mb-6 flex items-center justify-between text-sm text-muted-foreground">
         <span>Card {index + 1} of {cards.length}{showAll ? "" : " due"}</span>
         <button type="button" className="underline underline-offset-2 hover:text-indigo-600" onClick={() => { setShowAll((v) => !v); setIndex(0); }}>

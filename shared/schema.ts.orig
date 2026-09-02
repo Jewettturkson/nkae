@@ -72,16 +72,6 @@ export const studyMaterials = pgTable("study_materials", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Concepts: a finer grain than subject, e.g. "Krebs cycle" inside Biology.
-// Populated automatically at card generation time (the AI labels each card
-// with a concept), not hand-authored, so a subject fills in with real
-// structure as soon as the user uploads their first material.
-export const concepts = pgTable("concepts", {
-  id: serial("id").primaryKey(),
-  subjectId: integer("subject_id").references(() => subjects.id).notNull(),
-  label: varchar("label", { length: 100 }).notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
 // Flashcards generated from study materials
 export const flashcards = pgTable("flashcards", {
   id: serial("id").primaryKey(),
@@ -99,10 +89,6 @@ export const flashcards = pgTable("flashcards", {
   // subject than the rest of the deck it came from, e.g. a stray chemistry
   // definition that showed up inside a biology upload.
   subjectId: integer("subject_id").references(() => subjects.id),
-  // Finer than subjectId: which concept within the subject this card tests.
-  // Set automatically at generation time, not a constraint the user has to
-  // maintain by hand. Powers the knowledge map (constellation view).
-  conceptId: integer("concept_id").references(() => concepts.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -175,14 +161,6 @@ export const subjectsRelations = relations(subjects, ({ many }) => ({
   studyMaterials: many(studyMaterials),
   studySessions: many(studySessions),
   studyGoals: many(studyGoals),
-  concepts: many(concepts),
-}));
-export const conceptsRelations = relations(concepts, ({ one, many }) => ({
-  subject: one(subjects, {
-    fields: [concepts.subjectId],
-    references: [subjects.id],
-  }),
-  flashcards: many(flashcards),
 }));
 
 export const studyMaterialsRelations = relations(studyMaterials, ({ one, many }) => ({
@@ -211,10 +189,6 @@ export const flashcardsRelations = relations(flashcards, ({ one }) => ({
   subject: one(subjects, {
     fields: [flashcards.subjectId],
     references: [subjects.id],
-  }),
-  concept: one(concepts, {
-    fields: [flashcards.conceptId],
-    references: [concepts.id],
   }),
 }));
 
@@ -274,10 +248,6 @@ export const insertSubjectSchema = createInsertSchema(subjects).omit({
   createdAt: true,
 });
 
-export const insertConceptSchema = createInsertSchema(concepts).omit({
-  id: true,
-  createdAt: true,
-});
 export const insertStudyMaterialSchema = createInsertSchema(studyMaterials).omit({
   id: true,
   createdAt: true,
@@ -315,8 +285,6 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type InsertSubject = z.infer<typeof insertSubjectSchema>;
 export type Subject = typeof subjects.$inferSelect;
-export type InsertConcept = z.infer<typeof insertConceptSchema>;
-export type Concept = typeof concepts.$inferSelect;
 export type InsertStudyMaterial = z.infer<typeof insertStudyMaterialSchema>;
 export type StudyMaterial = typeof studyMaterials.$inferSelect;
 export type InsertFlashcard = z.infer<typeof insertFlashcardSchema>;

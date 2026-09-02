@@ -248,81 +248,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Knowledge map for a subject: nodes are concepts (auto-created at card
-  // generation time), edges are concepts that showed up together in the
-  // same uploaded material. Everything here is derived on request from the
-  // cards that already exist, nothing about the graph itself is stored, so
-  // it can never drift out of sync with what the cards actually say.
-  app.get('/api/concepts/graph', isAuthenticated, async (req: any, res) => {
-    try {
-      const subjectId = parseInt(req.query.subjectId as string);
-      if (!subjectId) {
-        return res.status(400).json({ message: "subjectId is required" });
-      }
-
-      const [conceptRows, cardRows] = await Promise.all([
-        storage.getConceptsBySubject(subjectId),
-        storage.getConceptGraphCards(subjectId),
-      ]);
-
-      // Mastery per concept: same "how close to mastered" signal reviewReason
-      // uses, averaged across that concept's cards. A concept with no
-      // reviewed cards yet shows as unseen (0), not an error.
-      const byConcept = new Map<number, { totalMastery: number; count: number }>();
-      const byMaterial = new Map<number, Set<number>>();
-
-      for (const card of cardRows) {
-        if (card.conceptId == null) continue;
-        const totalReviews = card.totalReviews || 0;
-        const correctStreak = card.correctStreak || 0;
-        const cardMastery = totalReviews === 0 ? 0 : Math.min(1, correctStreak / 5);
-        const agg = byConcept.get(card.conceptId) || { totalMastery: 0, count: 0 };
-        agg.totalMastery += cardMastery;
-        agg.count += 1;
-        byConcept.set(card.conceptId, agg);
-
-        if (card.studyMaterialId != null) {
-          const set = byMaterial.get(card.studyMaterialId) || new Set<number>();
-          set.add(card.conceptId);
-          byMaterial.set(card.studyMaterialId, set);
-        }
-      }
-
-      const nodes = conceptRows.map((c) => {
-        const agg = byConcept.get(c.id);
-        return {
-          id: c.id,
-          label: c.label,
-          mastery: agg ? agg.totalMastery / agg.count : 0,
-          cardCount: agg?.count ?? 0,
-        };
-      });
-
-      // Two concepts get an edge, weighted by how many materials produced
-      // both. This is deliberately co-occurrence only, not "the user
-      // confused these two," which would need per-review history we don't
-      // track yet.
-      const edgeWeights = new Map<string, { a: number; b: number; weight: number }>();
-      for (const conceptSet of byMaterial.values()) {
-        const ids = Array.from(conceptSet);
-        for (let i = 0; i < ids.length; i++) {
-          for (let j = i + 1; j < ids.length; j++) {
-            const [a, b] = ids[i] < ids[j] ? [ids[i], ids[j]] : [ids[j], ids[i]];
-            const key = `${a}-${b}`;
-            const existing = edgeWeights.get(key) || { a, b, weight: 0 };
-            existing.weight += 1;
-            edgeWeights.set(key, existing);
-          }
-        }
-      }
-
-      res.json({ nodes, edges: Array.from(edgeWeights.values()) });
-    } catch (error) {
-      console.error("Error building concept graph:", error);
-      res.status(500).json({ message: "Failed to build concept graph" });
-    }
-  });
-
   // Study materials routes
   app.get('/api/study-materials', isAuthenticated, async (req: any, res) => {
     try {
@@ -602,12 +527,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/flashcards', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { materialId, conceptId, due, limit = 20 } = req.query;
+      const { materialId, due, limit = 20 } = req.query;
       
       const flashcards = await storage.getFlashcards({
         userId,
         studyMaterialId: materialId ? parseInt(materialId as string) : undefined,
-        conceptId: conceptId ? parseInt(conceptId as string) : undefined,
         due: due === 'true',
         limit: parseInt(limit as string),
       });
@@ -652,7 +576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           {
             role: "system",
             content:
-              "You are a study assistant. From the provided material produce JSON: { 'summary': '2-4 sentence summary', 'keyPoints': ['5-8 key points'], 'flashcards': [{ 'front': 'question', 'back': 'answer', 'difficulty': 1-5, 'concept': '2-4 word topic this card tests, e.g. Krebs cycle' }] (8-12 cards), 'quizQuestions': [{ 'question': '...', 'options': ['A','B','C','D'], 'correctAnswer': 'exact option text', 'explanation': '...', 'difficulty': 1-5 }] (5-8 questions) }",
+              "You are a study assistant. From the provided material produce JSON: { 'summary': '2-4 sentence summary', 'keyPoints': ['5-8 key points'], 'flashcards': [{ 'front': 'question', 'back': 'answer', 'difficulty': 1-5 }] (8-12 cards), 'quizQuestions': [{ 'question': '...', 'options': ['A','B','C','D'], 'correctAnswer': 'exact option text', 'explanation': '...', 'difficulty': 1-5 }] (5-8 questions) }",
           },
           {
             role: "user",
@@ -673,12 +597,6 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
 
       const flashcards = [];
       for (const card of ai.flashcards || []) {
-        // Concepts only make sense scoped to a subject, so cards on a
-        // subjectless material just skip tagging rather than forcing one.
-        const conceptId =
-          material.subjectId && card.concept
-            ? (await storage.getOrCreateConcept(material.subjectId, String(card.concept))).id
-            : null;
         flashcards.push(
           await storage.createFlashcard({
             studyMaterialId: id,
@@ -688,7 +606,6 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
             difficulty: card.difficulty || 1,
             nextReview: new Date(),
             subjectId: material.subjectId ?? null, // inherits the material's subject; reassignable per card later
-            conceptId,
           })
         );
       }
@@ -739,7 +656,7 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
           messages: [
             {
               role: "system",
-              content: "You are a helpful study assistant. Generate 8-12 flashcards from the provided study material. Create clear, concise questions on the front and comprehensive answers on the back. Focus on key concepts, definitions, and important facts. Respond with JSON in this format: { 'flashcards': [{ 'front': 'question', 'back': 'answer', 'difficulty': 1-5, 'concept': '2-4 word topic this card tests, e.g. Krebs cycle' }] }"
+              content: "You are a helpful study assistant. Generate 8-12 flashcards from the provided study material. Create clear, concise questions on the front and comprehensive answers on the back. Focus on key concepts, definitions, and important facts. Respond with JSON in this format: { 'flashcards': [{ 'front': 'question', 'back': 'answer', 'difficulty': 1-5 }] }"
             },
             {
               role: "user",
@@ -753,10 +670,6 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
         const generatedFlashcards = [];
 
         for (const card of aiResult.flashcards || []) {
-          const conceptId =
-            material.subjectId && card.concept
-              ? (await storage.getOrCreateConcept(material.subjectId, String(card.concept))).id
-              : null;
           const flashcard = await storage.createFlashcard({
             studyMaterialId: material.id,
             userId,
@@ -765,7 +678,6 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
             difficulty: card.difficulty || 1,
             nextReview: new Date(), // Available immediately
             subjectId: material.subjectId ?? null, // inherits the material's subject; reassignable per card later
-            conceptId,
           });
           generatedFlashcards.push(flashcard);
         }
