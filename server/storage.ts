@@ -195,7 +195,7 @@ export class DatabaseStorage implements IStorage {
     if (filters.due) conditions.push(sql`(${flashcards.nextReview} IS NULL OR ${flashcards.nextReview} <= NOW())`);
     const rows = await db.query.flashcards.findMany({
       where: conditions.length ? and(...conditions) : undefined,
-      with: { user: true, studyMaterial: true },
+      with: { user: true, studyMaterial: true, subject: true },
       orderBy: asc(flashcards.nextReview),
       limit: filters.limit ?? 200,
     });

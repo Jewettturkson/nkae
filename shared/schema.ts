@@ -84,6 +84,11 @@ export const flashcards = pgTable("flashcards", {
   nextReview: timestamp("next_review"), // spaced repetition
   correctStreak: integer("correct_streak").default(0),
   totalReviews: integer("total_reviews").default(0),
+  // Defaults to the parent material's subject at generation time, but is its
+  // own column (not derived) so a single card can be moved to a different
+  // subject than the rest of the deck it came from, e.g. a stray chemistry
+  // definition that showed up inside a biology upload.
+  subjectId: integer("subject_id").references(() => subjects.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -180,6 +185,10 @@ export const flashcardsRelations = relations(flashcards, ({ one }) => ({
   user: one(users, {
     fields: [flashcards.userId],
     references: [users.id],
+  }),
+  subject: one(subjects, {
+    fields: [flashcards.subjectId],
+    references: [subjects.id],
   }),
 }));
 
@@ -300,6 +309,7 @@ export type StudyMaterialWithDetails = StudyMaterial & {
 export type FlashcardWithDetails = Flashcard & {
   studyMaterial: StudyMaterial | null;
   user: User;
+  subject: Subject | null;
 };
 
 export type StudySessionWithDetails = StudySession & {

@@ -605,6 +605,7 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
             back: card.back,
             difficulty: card.difficulty || 1,
             nextReview: new Date(),
+            subjectId: material.subjectId ?? null, // inherits the material's subject; reassignable per card later
           })
         );
       }
@@ -676,6 +677,7 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
             back: card.back,
             difficulty: card.difficulty || 1,
             nextReview: new Date(), // Available immediately
+            subjectId: material.subjectId ?? null, // inherits the material's subject; reassignable per card later
           });
           generatedFlashcards.push(flashcard);
         }
@@ -809,6 +811,36 @@ Content: ${material.content.slice(0, MAX_AI_CONTENT_CHARS)}`,
     } catch (error) {
       console.error("Error regenerating flashcard:", error);
       res.status(500).json({ message: "Failed to regenerate flashcard" });
+    }
+  });
+
+  // Moves a single card to a different subject than the deck it was
+  // generated with. Cards default to their material's subject at generation
+  // time, but that is just the default, not a constraint, since a stray
+  // definition from another subject can end up in an upload.
+  app.patch('/api/flashcards/:id/subject', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { subjectId } = req.body as { subjectId?: number | null };
+
+      const flashcard = await storage.getFlashcard(id);
+      if (!flashcard || flashcard.userId !== userId) {
+        return res.status(404).json({ message: "Flashcard not found or access denied" });
+      }
+
+      if (subjectId !== null && subjectId !== undefined) {
+        const subject = await storage.getSubject(subjectId);
+        if (!subject) {
+          return res.status(400).json({ message: "Subject not found" });
+        }
+      }
+
+      const updated = await storage.updateFlashcard(id, { subjectId: subjectId ?? null });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error reassigning flashcard subject:", error);
+      res.status(500).json({ message: "Failed to reassign flashcard subject" });
     }
   });
 

@@ -8,6 +8,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type RegenerateDirection = "harder" | "easier" | "reword";
 
+type Subject = { id: number; name: string };
+
 type Flashcard = {
   id: number;
   front: string;
@@ -16,10 +18,12 @@ type Flashcard = {
   totalReviews: number | null;
   nextReview: string | null;
   reviewReason: string | null;
+  subjectId: number | null;
 };
 
 export default function Flashcards() {
   const { data: allCards = [], isLoading } = useQuery<Flashcard[]>({ queryKey: ["/api/flashcards"] });
+  const { data: subjects = [] } = useQuery<Subject[]>({ queryKey: ["/api/subjects"] });
   const [showAll, setShowAll] = useState(false);
   const cards = useMemo(() => {
     if (showAll) return allCards;
@@ -53,6 +57,21 @@ export default function Flashcards() {
         prev ? prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)) : prev,
       );
       setFlipped(false);
+    },
+  });
+
+  // Cards default to their material's subject at generation time, this lets
+  // a single card be moved elsewhere, e.g. a stray definition that landed in
+  // the wrong upload.
+  const reassignSubject = useMutation({
+    mutationFn: async ({ id, subjectId }: { id: number; subjectId: number | null }) => {
+      const res = await apiRequest("PATCH", `/api/flashcards/${id}/subject`, { subjectId });
+      return (await res.json()) as Flashcard;
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData<Flashcard[]>(["/api/flashcards"], (prev) =>
+        prev ? prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)) : prev,
+      );
     },
   });
 
@@ -143,6 +162,26 @@ export default function Flashcards() {
           role="button"
           aria-label={flipped ? "Answer shown, swipe right if you got it, left if you missed" : "Tap to reveal the answer"}
         >
+          {/* Subject chip: shows what this card is filed under and lets you move it.
+              Stops propagation so tapping it doesn't flip the card or start a drag. */}
+          <select
+            value={card.subjectId ?? ""}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const v = e.target.value;
+              reassignSubject.mutate({ id: card.id, subjectId: v === "" ? null : parseInt(v) });
+            }}
+            disabled={reassignSubject.isPending}
+            className="absolute right-3 top-3 max-w-[45%] truncate rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+            aria-label="Card subject, tap to reassign"
+          >
+            <option value="">Unsorted</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
               {flipped ? "Answer" : "Question"}
