@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Upload, FileText, Sparkles, ArrowLeft, Mic, Square, AlertTriangle } from "lucide-react";
@@ -38,6 +38,18 @@ export default function NewMaterial() {
   const [flaggedLines, setFlaggedLines] = useState<number[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [flagCursor, setFlagCursor] = useState(0);
+
+  // Picks up subject/exam date handed off from the dashboard's "what are you
+  // studying" capture, so that intent actually lands somewhere real instead
+  // of being collected and then discarded. Read once on mount: this page
+  // owns the fields after that.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get("subjectId");
+    const exam = params.get("examDate");
+    if (sid) setSubjectId(sid);
+    if (exam) setExamDate(exam);
+  }, []);
 
   async function handleFile(file: File) {
     const okTypes = [".pdf", ".docx", ".txt", ".mp3", ".m4a", ".wav", ".webm", ".ogg"];

@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowRight, Flame, Layers, ListChecks, Plus, Timer } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import Heatmap from "@/components/app/Heatmap";
 import { AnimatedKaeMark } from "@/components/app/BrandMark";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,6 +20,16 @@ type Analytics = {
 };
 
 type Material = { id: number; title: string; summary: string | null; createdAt: string };
+type Subject = { id: number; name: string; slug: string };
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    || `subject-${Date.now()}`;
+}
 
 export default function Dashboard() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
@@ -36,6 +47,34 @@ export default function Dashboard() {
   const { data: materials = [] } = useQuery<Material[]>({
     queryKey: ["/api/study-materials"],
     enabled: isAuthenticated,
+  });
+  const { data: subjects = [] } = useQuery<Subject[]>({
+    queryKey: ["/api/subjects"],
+    enabled: isAuthenticated,
+  });
+
+  // First-run intent capture: what subject, and what pace. Goal changes the
+  // review cadence downstream by feeding an exam date into the material we
+  // create, which the existing /review scheduler already compresses
+  // intervals around, no new scheduling logic needed here.
+  const [subjectInput, setSubjectInput] = useState("");
+  const [studyPace, setStudyPace] = useState<"exam" | "ongoing">("ongoing");
+  const [targetDate, setTargetDate] = useState("");
+
+  const startWithSubject = useMutation({
+    mutationFn: async () => {
+      const name = subjectInput.trim();
+      const existing = subjects.find((s) => s.name.toLowerCase() === name.toLowerCase());
+      let subjectId = existing?.id;
+      if (!subjectId) {
+        const res = await apiRequest("POST", "/api/subjects", { name, slug: slugify(name) });
+        const created = await res.json();
+        subjectId = created.id;
+      }
+      const params = new URLSearchParams({ subjectId: String(subjectId) });
+      if (studyPace === "exam" && targetDate) params.set("examDate", targetDate);
+      setLocation(`/materials/new?${params.toString()}`);
+    },
   });
 
   const firstName = ((user as any)?.firstName || "").trim() || "there";
@@ -159,21 +198,84 @@ export default function Dashboard() {
             </Link>
           </div>
           {materials.length === 0 ? (
-            <div className="mt-6 rounded-xl border border-dashed border-border p-6 text-center">
-              <p className="font-medium text-foreground">Nothing here yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">Upload notes and the AI builds your summaries, cards, and quizzes.</p>
-              <button
-                onClick={async () => {
-                  try {
-                    await apiRequest("POST", "/api/study-materials/sample");
-                    queryClient.invalidateQueries({ queryKey: ["/api/study-materials"] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-                  } catch {}
-                }}
-                className="mt-4 inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-              >
-                Or try a sample material first
-              </button>
+            <div className="mt-6 rounded-xl border border-dashed border-border p-6">
+              <p className="font-medium text-foreground">What are you studying?</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This sets up your first upload so reviews are paced the way you actually need them.
+              </p>
+
+              <div className="mt-4 space-y-3 text-left">
+                <div>
+                  <Input
+                    value={subjectInput}
+                    onChange={(e) => setSubjectInput(e.target.value)}
+                    placeholder="e.g., Organic Chemistry"
+                    list="dashboard-subject-options"
+                    className="h-11"
+                  />
+                  <datalist id="dashboard-subject-options">
+                    {subjects.map((s) => (
+                      <option key={s.id} value={s.name} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStudyPace("exam")}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                      studyPace === "exam" ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    Prepping for an exam
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudyPace("ongoing")}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                      studyPace === "ongoing" ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    Ongoing review
+                  </button>
+                </div>
+
+                {studyPace === "exam" ? (
+                  <div>
+                    <Input
+                      type="date"
+                      value={targetDate}
+                      min={new Date().toISOString().split("T")[0]}
+                      onChange={(e) => setTargetDate(e.target.value)}
+                      className="h-11"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">Reviews compress so everything is covered before this day.</p>
+                  </div>
+                ) : null}
+
+                <Button
+                  className="w-full"
+                  disabled={!subjectInput.trim() || (studyPace === "exam" && !targetDate) || startWithSubject.isPending}
+                  onClick={() => startWithSubject.mutate()}
+                >
+                  {startWithSubject.isPending ? "Setting up…" : "Continue to upload"}
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await apiRequest("POST", "/api/study-materials/sample");
+                      queryClient.invalidateQueries({ queryKey: ["/api/study-materials"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+                    } catch {}
+                  }}
+                  className="w-full text-center text-sm font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                  Or try a sample material first
+                </button>
+              </div>
             </div>
           ) : (
             <ul className="mt-3 divide-y divide-border">
